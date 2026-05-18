@@ -1,0 +1,50 @@
+{
+    "job": {
+        "setting": {
+            "speed": { "channel": 3 }
+        },
+        "content": [
+            {
+                "reader": {
+                    "name": "mysqlreader",
+                    "parameter": {
+                        "username": "datax",
+                        "password": "Datax@123456",
+                        "connection": [
+                            {
+                                "querySql": [
+                                    "SELECT order_id, user_id, order_status, order_amount, discount_amount, actual_amount, payment_method, order_time, pay_time, DATE_FORMAT(create_time,'%Y-%m-%d %H:%i:%s') AS create_time, DATE_FORMAT(update_time,'%Y-%m-%d %H:%i:%s') AS update_time FROM ecommerce.fact_order"
+                                ],
+                                "jdbcUrl": ["jdbc:mysql://master:3306/ecommerce?useSSL=false&serverTimezone=Asia/Shanghai"]
+                            }
+                        ]
+                    }
+                },
+                "writer": {
+                    "name": "hdfswriter",
+                    "parameter": {
+                        "defaultFS": "hdfs://master:9000",
+                        "fileType": "text",
+                        "path": "/data_warehouse/ods/orders/full/2026-05-18",
+                        "fileName": "fact_order",
+                        "column": [
+                            {"name": "order_id", "type": "BIGINT"},
+                            {"name": "user_id", "type": "BIGINT"},
+                            {"name": "order_status", "type": "STRING"},
+                            {"name": "order_amount", "type": "DOUBLE"},
+                            {"name": "discount_amount", "type": "DOUBLE"},
+                            {"name": "actual_amount", "type": "DOUBLE"},
+                            {"name": "payment_method", "type": "STRING"},
+                            {"name": "order_time", "type": "STRING"},
+                            {"name": "pay_time", "type": "STRING"},
+                            {"name": "create_time", "type": "STRING"},
+                            {"name": "update_time", "type": "STRING"}
+                        ],
+                        "writeMode": "truncate",
+                        "fieldDelimiter": "\t"
+                    }
+                }
+            }
+        ]
+    }
+}
