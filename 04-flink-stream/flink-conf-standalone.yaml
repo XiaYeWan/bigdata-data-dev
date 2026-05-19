@@ -1,0 +1,17 @@
+# Flink Standalone 集群配置 — 适用于 7.6G 内存虚拟机
+# 文件路径: /opt/module/flink-1.17.2/conf/flink-conf.yaml
+# 已验证通过: Flink 1.17.2 embedded SQL Client + Kafka 3.6.1
+
+jobmanager.rpc.address: 0.0.0.0
+jobmanager.rpc.port: 6123
+jobmanager.memory.process.size: 800m
+taskmanager.memory.process.size: 1200m
+taskmanager.numberOfTaskSlots: 2
+parallelism.default: 1
+rest.port: 8081
+rest.bind-address: 0.0.0.0
+rest.address: master
+jobmanager.bind-host: 0.0.0.0
+taskmanager.bind-host: 0.0.0.0
+blob.server.port: 0
+blob.storage.directory: /tmp/flink-blob

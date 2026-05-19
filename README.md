@@ -22,7 +22,7 @@
 - [快速开始](#-快速开始)
 - [模块说明](#-模块说明)
 - [数据验证](#-数据验证)
-- [排错实战](#-排错实战-6-个问题--全部解决)
+- [排错实战](#-排错实战-11-个问题--全部解决)
 - [项目亮点](#-项目亮点)
 - [关联项目](#-关联项目)
 - [License](#-license)
@@ -123,7 +123,9 @@ bigdata-data-dev/
 │   ├── create_topics.sh              # 创建 Kafka Topic
 │   └── kafka_producer.py             # 模拟实时数据生产
 ├── 04-flink-stream/
-│   └── flink_sql_job.sql             # Flink SQL 流处理
+│   ├── flink_sql_job.sql              # Flink SQL 流处理（已验证）
+│   ├── flink-conf-standalone.yaml     # Flink 集群参考配置
+│   └── realtime_consumer.py           # Python 消费者备用方案
 ├── 05-scripts/
 │   ├── start_data_pipeline.sh        # 一键启动数据管道
 │   ├── check_data.sh                 # 数据验证巡检
@@ -148,11 +150,12 @@ bash 05-scripts/check_data.sh
 | MySQL 数据量 | 5 表共 31,500+ 条记录 |
 | HDFS ODS 文件 | `/data_warehouse/ods/` 下有 3 个表目录 |
 | Kafka Topic 状态 | `user-behavior-log` + `order-stream` 已创建 |
-| 实时数据流 | 持续有 JSON 消息产出 |
+| 实时数据流 | Python Producer 持续推送 JSON 消息 |
+| Flink SQL 窗口聚合 | 每分钟输出 `buy/cart/view/fav` 四类 UV/PV |
 
 ---
 
-## 🐛 排错实战 (6 个问题 → 全部解决)
+## 🐛 排错实战 (11 个问题 → 全部解决)
 
 ### 🟥 问题 1: DataX MySQL 远程连接被拒
 
@@ -267,6 +270,95 @@ pip3 install kafka-python
 
 ---
 
+### 🟥 问题 7: Flink 集群内存不足无法启动
+
+**现象**: `IllegalConfigurationException: Sum of configured JVM Metaspace and JVM Overhead exceed configured Total Process Memory`
+
+**根因**: 7.6G 物理机上同时跑 HDFS + YARN + Kafka + ZK，默认 Flink 内存配得太大（1.6G+）。
+
+**解决**: 精简配置，停掉非必要进程（DolphinScheduler 4 进程占了 ~2.3G）：
+```bash
+# flink-conf.yaml
+jobmanager.memory.process.size: 800m
+taskmanager.memory.process.size: 1200m
+parallelism.default: 1
+```
+
+> 💡 虚拟机学习环境要先 `free -h` 算可用内存，再配 Flink 内存。
+
+---
+
+### 🟥 问题 8: Flink SQL Client `Connection refused: localhost/127.0.0.1:8081`
+
+**现象**: `-f` 文件模式或 interactive 模式下 `SELECT` 执行时报 `java.net.ConnectException`
+
+**根因**: Flink `rest.bind-address: localhost` 只绑定 IPv6 `::1`，Java 优先用 IPv4 `127.0.0.1` 连接失败。
+
+**排查**: 日志 `flink-ttt-sql-client-*.log` 中显示 `Connection refused: localhost/127.0.0.1:8081`
+
+**解决**: 全部绑定改为 `0.0.0.0`，rest.address 用主机名：
+```yaml
+rest.bind-address: 0.0.0.0
+rest.address: master
+jobmanager.bind-host: 0.0.0.0
+taskmanager.bind-host: 0.0.0.0
+```
+
+> 💡 CentOS 7 上 `localhost` 默认映射到 IPv6 `::1`，Java 客户端走 IPv4 就连不上。用 `0.0.0.0` 或显式 IP。
+
+---
+
+### 🟥 问题 9: Flink `TaskManager not registered` — slots = 0
+
+**现象**: Web UI 显示 `slots-total: 0, taskmanagers: 0`，TaskExecutor 进程在但未注册到 JobManager。
+
+**根因**: `flink-conf.yaml` 中有重复/冲突的 `jobmanager.rpc.address` 行（先 localhost 后 master），TaskManager 用第一个值连接失败。
+
+**解决**:
+```bash
+grep -n "rpc.address\|bind-host" flink-conf.yaml | grep -v "^#"
+# 删除重复行、统一地址后重启
+```
+
+> 💡 配置文件中的重复键，排在前面的生效。`sed -i` 追加容易产生重复。
+
+---
+
+### 🟥 问题 10: Flink Kafka `TimeoutException: Timed out waiting for a node assignment`
+
+**现象**: 建表成功但查询报 `TimeoutException: Call: describeTopics`
+
+**根因**: `bootstrap.servers = '127.0.0.1:9092'` 能建表，但 Kafka 内部 `advertised.listeners = master:9092`，Flink 连上 127.0.0.1 后 Kafka 返回 master 地址，跨主机 DNS 解析失败。
+
+**解决**: `bootstrap.servers` 必须与 Kafka `advertised.listeners` 一致：
+```sql
+'properties.bootstrap.servers' = 'master:9092'
+```
+
+> 💡 Kafka broker 返回的 advertised 地址必须对 Flink 可达。先用 `nc -z master 9092` 确认。
+
+---
+
+### 🟥 问题 11: Flink SQL 文件 `-f` 模式 Shell 截断 SQL
+
+**现象**: `-f /tmp/flink_job.sql` 执行后 SQL 不完整，`GROUP BY` 被截断。
+
+**根因**: heredoc 写 SQL 文件时 shell 变量/特殊字符（如 `$`、反引号）可能被解释；python 写文件时 `'''` 三层引号嵌套错误。
+
+**解决**: 用 `cat << 'SQLEOF' ... SQLEOF`（单引号保护 + 无冲突分隔符）：
+```bash
+cat > /tmp/flink_job.sql << 'SQLEOF'
+SET 'sql-client.execution.result-mode' = 'tableau';
+...
+SQLEOF
+# 验证完整性
+grep "INTERVAL" /tmp/flink_job.sql
+```
+
+> 💡 写过 SQL 文件后必须 `grep` 关键行确认没有被 shell 截断。
+
+---
+
 ## 💡 项目亮点
 
 | 技术领域 | 实践内容 |
@@ -274,7 +366,7 @@ pip3 install kafka-python
 | 📊 **业务建模** | 5 表电商场景设计，维度表 + 事实表，存储过程批量造数 |
 | 🔄 **批量采集** | DataX MySQL → HDFS，3 通道并行，JSON 配置化 |
 | 📨 **实时通道** | Kafka 3 Broker 集群，2 Topic，Python 模拟实时生产者 |
-| 🌊 **流处理** | Flink SQL 窗口聚合，事件时间 Watermark，Kafka → HDFS |
+| 🌊 **流处理** | Flink SQL 窗口聚合（已验证：每分钟 UV/PV 实时输出） |
 | 🤖 **运维自动化** | 一键启动脚本编排 4 个步骤，全流程可视化输出 |
 
 ---
@@ -312,4 +404,4 @@ MIT © 2026 BigData-Dev Contributors
 ---
 
 > 📅 **创建日期**: 2026-05-18  
-> ⭐ **项目状态**: 数据采集 ✅ | 实时管道 ✅ | 已完成
+> ⭐ **项目状态**: 数据采集 ✅ | 实时管道 ✅ | Flink窗口聚合 ✅ | 已完成
