@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
 </p>
 
-> 🎯 应届生大数据学习项目：MySQL 业务数据设计 → DataX 批量采集 → Kafka 实时通道 → Flink 流处理。  
+> 🎯 个人学习实践：MySQL 业务数据设计 → DataX 批量采集 → Kafka 实时通道 → Flink 流处理。  
 > 🔧 与 [bigdata-cluster-deploy](https://github.com/XiaYeWan/bigdata-cluster-deploy) 集群配合使用。  
 > 📝 **声明**：本项目为个人学习实践，所有数据均为模拟生成，运行于 VMware 虚拟机环境。
 
