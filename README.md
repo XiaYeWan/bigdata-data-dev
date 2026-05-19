@@ -9,65 +9,23 @@
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
 </p>
 
-> 🎯 基于电商场景的数据开发项目：MySQL 业务数据设计 → DataX 批量采集 → Kafka 实时通道 → Flink 流处理。  
-> 🔧 与 [bigdata-cluster-deploy](https://github.com/XiaYeWan/bigdata-cluster-deploy) 集群配合使用。
+> 🎯 应届生大数据学习项目：MySQL 业务数据设计 → DataX 批量采集 → Kafka 实时通道 → Flink 流处理。  
+> 🔧 与 [bigdata-cluster-deploy](https://github.com/XiaYeWan/bigdata-cluster-deploy) 集群配合使用。  
+> 📝 **声明**：本项目为个人学习实践，所有数据均为模拟生成，运行于 VMware 虚拟机环境。
 
 ---
 
 ## 📖 目录
 
-- [企业数据开发全景](#-企业数据开发全景)
 - [业务场景](#-业务场景)
 - [数据架构](#-数据架构)
 - [快速开始](#-快速开始)
 - [模块说明](#-模块说明)
 - [数据验证](#-数据验证)
+- [排错实战](#-排错实战-6-个问题--全部解决)
 - [项目亮点](#-项目亮点)
-
----
-
-## 🏢 企业数据开发全景
-
-> 本项目的核心不是「搭通道」，而是展示数据开发岗位在企业中的真实工作模式。
-
-### 数据开发工程师日常
-
-```
-一次取数(15%)  → SELECT + JOIN + GROUP BY, 临时分析需求
-ETL开发(40%)   → Hive SQL 清洗/汇总/宽表，从ODS写到ADS
-数据质量(15%)  → DQC规则配置、脏数据隔离、对账脚本
-任务调度(15%)  → DolphinScheduler 编排、依赖链、失败重试
-问题排查(15%)  → 数据延迟、分区遗漏、上游变更、Spark OOM
-```
-
-### 数据开发 vs 机器学习预处理
-
-| 对比维度 | 机器学习预处理 | 数仓分层开发 |
-|----------|---------------|-------------|
-| 原始数据 | `raw.csv` | ODS 层（贴源数据） |
-| 清洗去重 | `drop_duplicates / fillna` | DWD 层（Hive SQL 去重/去空/标准化） |
-| 特征工程 | `groupby / merge / pivot` | DWS 层（聚合宽表） |
-| 最终输出 | `X_train, y_train` | ADS 层（业务指标） |
-| 工具 | pandas（MB 级） | Hive/Spark（TB 级） |
-| 验证方式 | `print(df.shape)` | `SELECT COUNT(*)` + 对账脚本 |
-| 编排方式 | Python 脚本 | DolphinScheduler 定时 DAG |
-| 数据质量 | 人工检查 | DQC 自动化规则 |
-
-**核心思想一致**：脏数据进来 → 洗干净 → 聚合 → 输出可用数据。区别在于规模、工具和工程化程度。
-
-### 本项目覆盖的数据开发环节
-
-| 环节 | 状态 | 技术 | 产出 |
-|------|:--:|------|------|
-| 业务数据建模 | ✅ | MySQL DDL | 5 张表，维度表 + 事实表 |
-| 离线批量采集 | ✅ | DataX | MySQL → HDFS ODS，3 张表 |
-| 实时数据通道 | ✅ | Kafka | 2 Topic，Python 模拟 Producer |
-| Hive 外表映射 | ✅ | Hive DDL | ODS 层对 HDFS 数据建外表 |
-| 流处理 | ✅ | Flink SQL | Kafka → 窗口聚合 → HDFS |
-| ODS→DWD 清洗 | 🔜 下一项目 | Hive SQL | 去重/去空/标准化 |
-| DWD→DWS 汇总 | 🔜 下一项目 | Hive SQL | 跨表关联，宽表 |
-| ADS 指标 | 🔜 下一项目 | Hive SQL | 面向报表的年月日指标 |
-| 任务调度 | 🔜 下一项目 | DolphinScheduler | 定时 DAG 编排 |
+- [关联项目](#-关联项目)
+- [License](#-license)
 
 ---
 
@@ -168,7 +126,8 @@ bigdata-data-dev/
 │   └── flink_sql_job.sql             # Flink SQL 流处理
 ├── 05-scripts/
 │   ├── start_data_pipeline.sh        # 一键启动数据管道
-│   └── check_data.sh                 # 数据验证巡检
+│   ├── check_data.sh                 # 数据验证巡检
+│   └── hive_ods_ddl.sql              # Hive ODS 外表 DDL
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -193,11 +152,126 @@ bash 05-scripts/check_data.sh
 
 ---
 
+## 🐛 排错实战 (6 个问题 → 全部解决)
+
+### 🟥 问题 1: DataX MySQL 远程连接被拒
+
+**现象**:
+```
+ERROR: Access denied for user 'root'@'master' (using password: YES)
+```
+但 `mysql -uroot -pRoot@123456` 命令行可以连接。
+
+**根因**: MySQL `root` 用户默认只允许 `localhost` 连接，DataX 通过 `jdbc:mysql://master:3306` 连接被视为远程连接。
+
+**解决**:
+```sql
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' IDENTIFIED BY 'Root@123456' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+```
+
+> 💡 本地命令能连 ≠ 远程能连，MySQL 用户权限分 `root@localhost` 和 `root@%`。
+
+---
+
+### 🟥 问题 2: DataX HDFS 目标路径不存在
+
+**现象**:
+```
+ERROR: 您配置的path: [/user/hive/warehouse/ods.db/dim_user] 不存在
+```
+
+**根因**: DataX HdfsWriter 要求目标目录必须预先存在，Hive `CREATE TABLE` 只是写元数据，不自动建 HDFS 目录。
+
+**解决**:
+```bash
+hdfs dfs -mkdir -p /user/hive/warehouse/ods.db/dim_user
+hdfs dfs -mkdir -p /user/hive/warehouse/ods.db/dim_product
+hdfs dfs -mkdir -p /user/hive/warehouse/ods.db/fact_order
+```
+
+> 💡 用 DataX 写 HDFS 前，先 `hdfs dfs -ls` 确认路径存在。
+
+---
+
+### 🟥 问题 3: Hive 命令找不到
+
+**现象**: `bash: hive: 未找到命令...`
+
+**根因**: `PATH` 环境变量没有包含 Hive 的 `bin` 目录。
+
+**解决**: 使用完整路径 `/opt/module/hive-3.1.3/bin/hive`
+
+**永久方案**:
+```bash
+echo 'export PATH=$PATH:/opt/module/hive-3.1.3/bin' >> ~/.bashrc
+source ~/.bashrc
+```
+
+> 💡 自己安装的组件 PATH 不一定自动生效，先 `which hive` 确认。
+
+---
+
+### 🟥 问题 4: Kafka 连接 ZooKeeper 超时
+
+**现象**: `ZooKeeperClientTimeoutException` — ZK 进程正常但 Kafka 跨节点连不上。
+
+**根因**: Slave 节点防火墙未完全关闭，2181 端口被 `iptables` 规则拦截。
+
+**排查**:
+```bash
+nc slave1 2181          # 无响应 → 端口被封
+iptables -L -n          # 发现拦截规则
+```
+
+**解决**:
+```bash
+for host in slave1 slave2; do
+    ssh $host "systemctl stop firewalld; systemctl disable firewalld; iptables -F"
+done
+```
+
+> 💡 集群组件连接超时，**先查防火墙**。`firewalld` 和 `iptables` 是两个层面。
+
+---
+
+### 🟥 问题 5: pip3 安装 kafka-python 报错
+
+**现象**: `pip3 install kafka-python` 报 `No matching distribution found`
+
+**根因**: CentOS 7 自带的 Python 3.6 + pip3 版本过老，部分包索引失效。
+
+**解决**:
+```bash
+# 升级 pip 后再装
+pip3 install --upgrade pip
+pip3 install kafka-python
+```
+
+> 💡 EOL 系统上的 pip 也需要先升级。
+
+---
+
+### 🟥 问题 6: DataX JSON 配置中 JDBC 连接串写法
+
+**现象**: DataX 报 `Communications link failure`
+
+**根因**: `jdbc:mysql://localhost:3306/ecommerce` 在 DataX 运行时会走 TCP 连接，不能用 `localhost`（DataX 可能不在同一主机上运行）。
+
+**解决**: 明确写主机名或 IP：
+```json
+"jdbcUrl": "jdbc:mysql://master:3306/ecommerce?useSSL=false&serverTimezone=Asia/Shanghai"
+```
+
+> 💡 DataX Reader 配置中 `localhost` 只在 DataX 与 MySQL 同机时有效，生产一律用主机名。
+
+---
+
 ## 💡 项目亮点
 
 | 技术领域 | 实践内容 |
 |----------|----------|
-| 📊 **业务建模** | 5 表电商场景设计，维度表 + 事实表数仓建模前置 |
+| 📊 **业务建模** | 5 表电商场景设计，维度表 + 事实表，存储过程批量造数 |
 | 🔄 **批量采集** | DataX MySQL → HDFS，3 通道并行，JSON 配置化 |
 | 📨 **实时通道** | Kafka 3 Broker 集群，2 Topic，Python 模拟实时生产者 |
 | 🌊 **流处理** | Flink SQL 窗口聚合，事件时间 Watermark，Kafka → HDFS |
@@ -205,13 +279,29 @@ bash 05-scripts/check_data.sh
 
 ---
 
+## 📝 学习笔记：数仓分层 vs 机器学习预处理
+
+在学习过程中，我发现数仓 ETL 的四层架构和机器学习数据预处理有很多相似之处：
+
+| 对比维度 | 机器学习预处理 | 数仓分层开发 |
+|----------|---------------|-------------|
+| 原始数据 | `raw.csv` | ODS 层（贴源数据） |
+| 清洗去重 | `drop_duplicates / fillna` | DWD 层（Hive SQL 去重/去空/标准化） |
+| 特征聚合 | `groupby / merge / pivot` | DWS 层（聚合宽表） |
+| 最终输出 | `X_train, y_train` | ADS 层（业务指标） |
+| 工具 | pandas（MB 级） | Hive/Spark（TB 级） |
+| 验证方式 | `print(df.shape)` | `SELECT COUNT(*)` + 对账脚本 |
+
+**核心思想一致**：脏数据进来 → 洗干净 → 聚合 → 输出可用数据。区别在于规模、工具和工程化程度。
+
+---
+
 ## 🔗 关联项目
 
 | 项目 | 说明 |
 |------|------|
-| [bigdata-cluster-deploy](https://github.com/XiaYeWan/bigdata-cluster-deploy) | 大数据集群搭建（基础设施层） |
-| 数仓建设 (规划中) | Hive 分层建模 ODS→DWD→DWS→ADS |
-| 可视化 (规划中) | Superset 看板 + DolphinScheduler 调度 |
+| [bigdata-cluster-deploy](https://github.com/XiaYeWan/bigdata-cluster-deploy) | 大数据集群搭建（基础设施层，Day1） |
+| [bigdata-data-warehouse](https://github.com/XiaYeWan/bigdata-data-warehouse) | 离线数仓ETL + DS调度 + Superset可视化（Day3） |
 
 ---
 
@@ -222,4 +312,4 @@ MIT © 2026 BigData-Dev Contributors
 ---
 
 > 📅 **创建日期**: 2026-05-18  
-> ⭐ **项目状态**: 🚧 进行中（离线采集 ✅ ｜ 实时管道 🚧）
+> ⭐ **项目状态**: 数据采集 ✅ | 实时管道 ✅ | 已完成
