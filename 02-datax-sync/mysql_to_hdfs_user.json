@@ -1,0 +1,47 @@
+{
+    "job": {
+        "setting": {
+            "speed": { "channel": 3 }
+        },
+        "content": [
+            {
+                "reader": {
+                    "name": "mysqlreader",
+                    "parameter": {
+                        "username": "datax",
+                        "password": "Datax@123456",
+                        "connection": [
+                            {
+                                "querySql": [
+                                    "SELECT user_id, user_name, gender, age, city, register_date, vip_level, DATE_FORMAT(create_time,'%Y-%m-%d %H:%i:%s') AS create_time FROM ecommerce.dim_user"
+                                ],
+                                "jdbcUrl": ["jdbc:mysql://master:3306/ecommerce?useSSL=false&serverTimezone=Asia/Shanghai"]
+                            }
+                        ]
+                    }
+                },
+                "writer": {
+                    "name": "hdfswriter",
+                    "parameter": {
+                        "defaultFS": "hdfs://master:9000",
+                        "fileType": "text",
+                        "path": "/data_warehouse/ods/user/full/2026-05-18",
+                        "fileName": "dim_user",
+                        "column": [
+                            {"name": "user_id", "type": "BIGINT"},
+                            {"name": "user_name", "type": "STRING"},
+                            {"name": "gender", "type": "STRING"},
+                            {"name": "age", "type": "INT"},
+                            {"name": "city", "type": "STRING"},
+                            {"name": "register_date", "type": "STRING"},
+                            {"name": "vip_level", "type": "INT"},
+                            {"name": "create_time", "type": "STRING"}
+                        ],
+                        "writeMode": "truncate",
+                        "fieldDelimiter": "\t"
+                    }
+                }
+            }
+        ]
+    }
+}

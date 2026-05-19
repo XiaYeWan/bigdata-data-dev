@@ -1,0 +1,48 @@
+{
+    "job": {
+        "setting": {
+            "speed": { "channel": 3 }
+        },
+        "content": [
+            {
+                "reader": {
+                    "name": "mysqlreader",
+                    "parameter": {
+                        "username": "datax",
+                        "password": "Datax@123456",
+                        "connection": [
+                            {
+                                "querySql": [
+                                    "SELECT product_id, product_name, category, brand, price, cost, stock, launch_date, DATE_FORMAT(create_time,'%Y-%m-%d %H:%i:%s') AS create_time FROM ecommerce.dim_product"
+                                ],
+                                "jdbcUrl": ["jdbc:mysql://master:3306/ecommerce?useSSL=false&serverTimezone=Asia/Shanghai"]
+                            }
+                        ]
+                    }
+                },
+                "writer": {
+                    "name": "hdfswriter",
+                    "parameter": {
+                        "defaultFS": "hdfs://master:9000",
+                        "fileType": "text",
+                        "path": "/data_warehouse/ods/product/full/2026-05-18",
+                        "fileName": "dim_product",
+                        "column": [
+                            {"name": "product_id", "type": "BIGINT"},
+                            {"name": "product_name", "type": "STRING"},
+                            {"name": "category", "type": "STRING"},
+                            {"name": "brand", "type": "STRING"},
+                            {"name": "price", "type": "DOUBLE"},
+                            {"name": "cost", "type": "DOUBLE"},
+                            {"name": "stock", "type": "INT"},
+                            {"name": "launch_date", "type": "STRING"},
+                            {"name": "create_time", "type": "STRING"}
+                        ],
+                        "writeMode": "truncate",
+                        "fieldDelimiter": "\t"
+                    }
+                }
+            }
+        ]
+    }
+}
