@@ -1,0 +1,38 @@
+{
+    "job": {
+        "setting": { "speed": { "channel": 3 } },
+        "content": [{
+            "reader": {
+                "name": "mysqlreader",
+                "parameter": {
+                    "username": "datax",
+                    "password": "Datax@123456",
+                    "connection": [{
+                        "querySql": ["SELECT detail_id, order_id, product_id, quantity, unit_price, subtotal, DATE_FORMAT(create_time,'%Y-%m-%d %H:%i:%s') AS create_time FROM ecommerce.fact_order_detail"],
+                        "jdbcUrl": ["jdbc:mysql://master:3306/ecommerce?useSSL=false&serverTimezone=Asia/Shanghai"]
+                    }]
+                }
+            },
+            "writer": {
+                "name": "hdfswriter",
+                "parameter": {
+                    "defaultFS": "hdfs://master:9000",
+                    "fileType": "text",
+                    "path": "/data_warehouse/ods/order_detail/full/2026-05-18",
+                    "fileName": "fact_order_detail",
+                    "column": [
+                        {"name":"detail_id","type":"BIGINT"},
+                        {"name":"order_id","type":"BIGINT"},
+                        {"name":"product_id","type":"BIGINT"},
+                        {"name":"quantity","type":"BIGINT"},
+                        {"name":"unit_price","type":"DOUBLE"},
+                        {"name":"subtotal","type":"DOUBLE"},
+                        {"name":"create_time","type":"STRING"}
+                    ],
+                    "writeMode": "truncate",
+                    "fieldDelimiter": "\t"
+                }
+            }
+        }]
+    }
+}

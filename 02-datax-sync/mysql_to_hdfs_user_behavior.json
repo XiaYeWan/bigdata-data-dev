@@ -1,0 +1,39 @@
+{
+    "job": {
+        "setting": { "speed": { "channel": 3 } },
+        "content": [{
+            "reader": {
+                "name": "mysqlreader",
+                "parameter": {
+                    "username": "datax",
+                    "password": "Datax@123456",
+                    "connection": [{
+                        "querySql": ["SELECT log_id, user_id, product_id, behavior_type, behavior_time, session_id, ip, DATE_FORMAT(create_time,'%Y-%m-%d %H:%i:%s') AS create_time FROM ecommerce.ods_user_behavior"],
+                        "jdbcUrl": ["jdbc:mysql://master:3306/ecommerce?useSSL=false&serverTimezone=Asia/Shanghai"]
+                    }]
+                }
+            },
+            "writer": {
+                "name": "hdfswriter",
+                "parameter": {
+                    "defaultFS": "hdfs://master:9000",
+                    "fileType": "text",
+                    "path": "/data_warehouse/ods/user_behavior/full/2026-05-18",
+                    "fileName": "ods_user_behavior",
+                    "column": [
+                        {"name":"log_id","type":"BIGINT"},
+                        {"name":"user_id","type":"BIGINT"},
+                        {"name":"product_id","type":"BIGINT"},
+                        {"name":"behavior_type","type":"STRING"},
+                        {"name":"behavior_time","type":"STRING"},
+                        {"name":"session_id","type":"STRING"},
+                        {"name":"ip","type":"STRING"},
+                        {"name":"create_time","type":"STRING"}
+                    ],
+                    "writeMode": "truncate",
+                    "fieldDelimiter": "\t"
+                }
+            }
+        }]
+    }
+}
